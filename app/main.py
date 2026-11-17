@@ -9,9 +9,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app import auth, models, schemas
-from app.database import SessionLocal, engine, get_db
+from app.database import SessionLocal, engine, ensure_schema, get_db
 
 models.Base.metadata.create_all(bind=engine)
+ensure_schema()
 app = FastAPI(title="구매 뭉탱이 API", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
