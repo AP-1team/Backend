@@ -63,7 +63,7 @@ class UserUpdateRequest(BaseModel):
 class GroupCreateRequest(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     description: str = ""
-    category: str = Field(min_length=1, max_length=50)
+    category: str = Field(default="기타", min_length=1, max_length=50)
     price: int = Field(gt=0)
     targetCount: int = Field(gt=0)
     deadline: datetime
