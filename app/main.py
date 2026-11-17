@@ -44,8 +44,16 @@ async def api_validation_error(request: Request, exc: RequestValidationError):
     }})
 
 
-def user_view(user: models.User):
-    return {"id": user.id, "username": user.username, "phone": user.phone, "address": user.address}
+def user_view(user: models.User, db: Session | None = None):
+    bought_count = 0
+    if db is not None:
+        bought_count = db.query(models.Payment).filter_by(
+            user_id=user.id, status="COMPLETED"
+        ).count()
+    return {
+        "id": user.id, "username": user.username, "phone": user.phone, "address": user.address,
+        "coinBalance": user.coin_balance, "boughtCount": bought_count,
+    }
 
 
 def count_participants(db: Session, group_id: int) -> int:
@@ -65,6 +73,13 @@ def group_summary(db: Session, group: models.Group):
         "id": group.id, "title": group.title, "category": group.category, "price": group.price,
         "targetCount": group.target_count, "currentCount": count_participants(db, group.id),
         "quantity": group.quantity, "region": group.region, "imageUrl": group.image_url,
+        "perPersonPrice": group.price // group.target_count,
+        "perPersonQuantity": (
+            group.quantity // group.target_count
+            if group.quantity is not None and group.quantity % group.target_count == 0
+            else None
+        ),
+        "createdAt": group.created_at.isoformat(),
         "status": group_status(group, count_participants(db, group.id)),
         "deadline": group.deadline.isoformat(),
     }
@@ -99,7 +114,7 @@ def signup(request: schemas.SignUpRequest, db: Session = Depends(get_db)):
         db.rollback()
         raise fail("DUPLICATE_USERNAME", "이미 사용 중인 아이디입니다.", 409)
     db.refresh(user)
-    return {"success": True, "data": {"user": user_view(user)}}
+    return {"success": True, "data": {"user": user_view(user, db)}}
 
 
 @app.post("/api/auth/login")
@@ -123,8 +138,8 @@ def logout(auth_data=Depends(auth.get_current_user_and_token), db: Session = Dep
 
 
 @app.get("/api/users/me")
-def get_me(auth_data=Depends(auth.get_current_user_and_token)):
-    return {"success": True, "data": {"user": user_view(auth_data[0])}}
+def get_me(auth_data=Depends(auth.get_current_user_and_token), db: Session = Depends(get_db)):
+    return {"success": True, "data": {"user": user_view(auth_data[0], db)}}
 
 
 @app.patch("/api/users/me")
@@ -139,7 +154,7 @@ def update_me(request: schemas.UserUpdateRequest, auth_data=Depends(auth.get_cur
     for key, value in changes.items():
         setattr(user, key, value)
     db.commit()
-    return {"success": True, "data": {"user": user_view(user)}}
+    return {"success": True, "data": {"user": user_view(user, db)}}
 
 
 @app.post("/api/groups", status_code=201)
@@ -186,7 +201,8 @@ def search_groups(keyword: str = Query(..., min_length=1), db: Session = Depends
 
 
 @app.get("/api/groups/{group_id}")
-def get_group(group_id: int, db: Session = Depends(get_db)):
+def get_group(group_id: int, db: Session = Depends(get_db),
+              current_user: models.User | None = Depends(auth.get_optional_user)):
     group = require_group(db, group_id)
     participants = db.query(models.GroupParticipant).filter_by(group_id=group_id).all()
     result = group_summary(db, group)
@@ -194,6 +210,7 @@ def get_group(group_id: int, db: Session = Depends(get_db)):
         "description": group.description,
         "author": {"id": group.author.id, "username": group.author.username},
         "participants": [{"id": item.user.id, "username": item.user.username} for item in participants],
+        "isJoined": bool(current_user and any(item.user_id == current_user.id for item in participants)),
     })
     return {"success": True, "data": {"group": result}}
 
@@ -349,11 +366,13 @@ def notifications(auth_data=Depends(auth.get_current_user_and_token), db: Sessio
     ensure_deadline_notifications(db, user.id)
     rows = db.query(models.Notification).filter_by(user_id=user.id).order_by(
         models.Notification.created_at.desc()).all()
+    unread_count = sum(not row.is_read for row in rows)
     return {"success": True, "data": {"notifications": [
         {"id": row.id, "groupId": row.group_id, "title": row.group.title, "type": row.type,
          "message": row.message, "deadline": row.group.deadline.isoformat(),
-         "createdAt": row.created_at.isoformat(), "isRead": row.is_read} for row in rows
-    ]}}
+         "createdAt": row.created_at.isoformat(), "isRead": row.is_read,
+         "imageUrl": row.group.image_url} for row in rows
+    ], "unreadCount": unread_count}}
 
 
 @app.post("/api/users/me/notifications/read")
@@ -379,6 +398,7 @@ def charge_coins(request: schemas.CoinChargeRequest,
     db.commit()
     return {"success": True, "data": {
         "chargedAmount": request.amount, "balance": user.coin_balance,
+        "coinBalance": user.coin_balance,
         "chargedAt": charged_at.isoformat()
     }}
 
@@ -428,7 +448,8 @@ def pay_settlement(group_id: int, auth_data=Depends(auth.get_current_user_and_to
     db.commit()
     return {"success": True, "data": {
         "groupId": group_id, "userId": user.id, "paidCoin": amount,
-        "balance": user.coin_balance, "paidAt": payment.paid_at.isoformat()
+        "balance": user.coin_balance, "coinBalance": user.coin_balance,
+        "paidAt": payment.paid_at.isoformat()
     }}
 
 

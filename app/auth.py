@@ -59,3 +59,15 @@ def get_current_user_and_token(
     if user is None:
         raise unauthorized
     return user, token.token
+
+
+def get_optional_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+    db: Session = Depends(get_db),
+):
+    if credentials is None:
+        return None
+    token = db.query(models.Token).filter(models.Token.token == credentials.credentials).first()
+    if token is None or token.expires_at <= datetime.utcnow():
+        return None
+    return db.query(models.User).filter(models.User.id == token.user_id).first()
