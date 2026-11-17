@@ -1,9 +1,12 @@
 from datetime import datetime
 
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.orm import relationship
 
 from app.database import Base
+
+IMAGE_COLUMN_TYPE = Text().with_variant(LONGTEXT(), "mysql")
 
 
 class User(Base):
@@ -37,6 +40,9 @@ class Group(Base):
     category = Column(String(50), nullable=False)
     price = Column(Integer, nullable=False)
     target_count = Column(Integer, nullable=False)
+    quantity = Column(Integer, nullable=True)
+    region = Column(String(100), nullable=False, default="")
+    image_url = Column(IMAGE_COLUMN_TYPE, nullable=True)
     deadline = Column(DateTime, nullable=False)
     author_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

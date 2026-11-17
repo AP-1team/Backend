@@ -64,6 +64,7 @@ def group_summary(db: Session, group: models.Group):
     return {
         "id": group.id, "title": group.title, "category": group.category, "price": group.price,
         "targetCount": group.target_count, "currentCount": count_participants(db, group.id),
+        "quantity": group.quantity, "region": group.region, "imageUrl": group.image_url,
         "status": group_status(group, count_participants(db, group.id)),
         "deadline": group.deadline.isoformat(),
     }
@@ -147,6 +148,7 @@ def create_group(request: schemas.GroupCreateRequest, auth_data=Depends(auth.get
     user, _ = auth_data
     group = models.Group(title=request.title.strip(), description=request.description,
                          category=request.category, price=request.price, target_count=request.targetCount,
+                         quantity=request.quantity, region=request.region, image_url=request.image,
                          deadline=request.deadline, author_id=user.id)
     db.add(group)
     db.flush()

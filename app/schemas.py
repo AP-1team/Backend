@@ -66,6 +66,9 @@ class GroupCreateRequest(BaseModel):
     category: str = Field(default="기타", min_length=1, max_length=50)
     price: int = Field(gt=0)
     targetCount: int = Field(gt=0)
+    quantity: int | None = Field(default=None, gt=0)
+    region: str = Field(default="", max_length=100)
+    image: str | None = None
     deadline: datetime
 
 
